@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Мой Склад — Telegram Mini App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #f1f5f9);
+    --sec-bg: var(--tg-theme-secondary-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #0f172a);
+    --hint: var(--tg-theme-hint-color, #64748b);
+    --btn: var(--tg-theme-button-color, #2563eb);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --border: rgba(148, 163, 184, 0.35);
+    --cell-bg: var(--tg-theme-bg-color, #f8fafc);
+    --filled-bg: rgba(34, 197, 94, 0.14);
+    --filled-border: #22c55e;
+    --empty-face: #3b82f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+  header {
+    background: var(--sec-bg);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    z-index: 20;
+    flex-shrink: 0;
+  }
+  .search-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .search-wrap input {
+    width: 100%;
+    padding: 8px 30px 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+  }
+  .clear-search {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--hint);
+    font-size: 16px;
+    display: none;
+    cursor: pointer;
+  }
+  .icon-btn {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .icon-btn.active {
+    background: var(--btn);
+    color: var(--btn-text);
+    border-color: var(--btn);
+  }
+  #viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    touch-action: none;
+    background-image: radial-gradient(rgba(148,163,184,0.25) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  #canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1200px;
+    height: 1100px;
+    transform-origin: 0 0;
+  }
+  .rack {
+    position: absolute;
+    background: var(--sec-bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .rack.face-top {
+    flex-direction: column-reverse;
+  }
+  .rack-header {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--hint);
+    background: rgba(148, 163, 184, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+  .rack-controls {
+    display: none;
+    gap: 4px;
+  }
+  body.layout-mode .rack-controls {
+    display: flex;
+  }
+  body.layout-mode .rack {
+    border-color: var(--btn);
+    cursor: grab;
+  }
+  .mini-btn {
+    background: var(--btn);
+    color: var(--btn-text);
+    border: none;
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .cells-row {
+    display: flex;
+    gap: 4px;
+    padding: 5px;
+  }
+  .cell {
+    width: 78px;
+    height: 68px;
+    background: var(--cell-bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .rack.face-bottom .cell {
+    border-bottom: 3.5px solid var(--empty-face);
+  }
+  .rack.face-top .cell {
+    border-top: 3.5px solid var(--empty-face);
+  }
+  .cell.filled {
+    background: var(--filled-bg);
+    border-color: rgba(34, 197, 94, 0.45);
+  }
+  .rack.face-bottom .cell.filled {
+    border-bottom: 3.5px solid var(--filled-border);
+  }
+  .rack.face-top .cell.filled {
+    border-top: 3.5px solid var(--filled-border);
+  }
+  .cell.highlight {
+    background: #fef08a !important;
+    border-color: #eab308 !important;
+    color: #0f172a !important;
+    box-shadow: 0 0 0 2px #eab308;
+  }
+  .cell-num {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--hint);
+    opacity: 0.75;
+  }
+  .single-item {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.15;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .dual-items {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-top: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .dual-top {
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dual-bottom {
+    padding-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .zoom-controls {
+    position: fixed;
+    right: 12px;
+    bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 15;
+  }
+  .zoom-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--sec-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 18px;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .zoom-btn.text-sm {
+    font-size: 11px;
+  }
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    z-index: 40;
+  }
+  .backdrop.open { display: block; }
+  .sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--sec-bg);
+    border-radius: 18px 18px 0 0;
+    padding: 16px;
+    z-index: 50;
+    transform: translateY(100%);
+    transition: transform 0.22s ease-out;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 -6px 24px rgba(0,0,0,0.18);
+  }
+  .sheet.open { transform: translateY(0); }
+  .sheet-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .sheet-title { font-size: 16px; font-weight: 700; }
+  .close-btn {
+    background: var(--bg);
+    border: none;
+    color: var(--text);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .slot-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .slot-label {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--hint);
+  }
+  .field-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .field-row input {
+    flex: 1;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--sec-bg);
+    color: var(--text);
+    font-size: 14px;
+    user-select: text;
+  }
+  .field-row input.qty-input {
+    max-width: 72px;
+    text-align: center;
+  }
+  .btn-primary {
+    width: 100%;
+    padding: 11px;
+    border-radius: 10px;
+    border: none;
+    background: var(--btn);
+    color: var(--btn-text);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .btn-secondary {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 8px;
+    text-align: left;
+  }
+  .btn-danger {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  textarea.json-box {
+    width: 100%;
+    height: 120px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 8px;
+    font-size: 12px;
+    margin-bottom: 8px;
+    user-select: text;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="search-wrap">
+    <input type="text" id="searchInput" placeholder="Поиск товара на складе...">
+    <button class="clear-search" id="clearSearch">✕</button>
+  </div>
+  <button class="icon-btn" id="layoutBtn">📐 Ряды</button>
+  <button class="icon-btn" id="menuBtn">☰</button>
+</header>
+
+<div id="viewport">
+  <div id="canvas"></div>
+</div>
+
+<div class="zoom-controls">
+  <button class="zoom-btn" id="zoomIn">+</button>
+  <button class="zoom-btn" id="zoomOut">−</button>
+  <button class="zoom-btn text-sm" id="zoomFit">Вся</button>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<!-- Карточка ячейки -->
+<div class="sheet" id="cellSheet">
+  <div class="sheet-head">
+    <div class="sheet-title" id="cellSheetTitle">Ячейка</div>
+    <button class="close-btn" onclick="closeSheets()">✕</button>
+  </div>
+  <div class="slot-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div class="slot-label" style="margin:0;">⬆️ Верхний товар</div>
+      <button class="btn-danger" onclick="clearSlot('top')">Очистить</button>
+    </div>
+    <div class="field-row">
+      <input type="text" id="topName" placeholder="Название товара">
+      <input type="number" id="topQty" class="qty-input" value="1" min="1">
+    </div>
+    <div class="field-row" style="margin-bottom:0;">
+      <input type="text" id="topNote" placeholder="Заметка (необязательно)">
+    </div>
+  </div>
+
+  <div class="slot-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div class="slot-label" style="margin:0;">⬇️ Нижний товар</div>
+      <button class="btn-danger" onclick="clearSlot('bottom')">Очистить</button>
+    </div>
+    <div class="field-row">
+      <input type="text" id="bottomName" placeholder="Название товара">
+      <input type="number" id="bottomQty" class="qty-input" value="1" min="1">
+    </div>
+    <div class="field-row" style="margin-bottom:0;">
+      <input type="text" id="bottomNote" placeholder="Заметка (необязательно)">
+    </div>
+  </div>
+
+  <button class="btn-primary" onclick="saveCell()">Сохранить ячейку</button>
+</div>
+
+<!-- Меню -->
+<div class="sheet" id="menuSheet">
+  <div class="sheet-head">
+    <div class="sheet-title">Управление складом</div>
+    <button class="close-btn" onclick="closeSheets()">✕</button>
+  </div>
+  <button class="btn-secondary" onclick="exportBackup()">💾 Скачать резервную копию (.json)</button>
+  <button class="btn-secondary" onclick="copyBackupText()">📋 Скопировать данные в буфер обмена</button>
+  <button class="btn-secondary" onclick="togglePasteBox()">📥 Загрузить данные из текста (JSON)</button>
+  <div id="pasteBox" style="display:none;margin-bottom:10px;">
+    <textarea class="json-box" id="jsonPasteInput" placeholder="Вставьте сюда скопированный JSON..."></textarea>
+    <button class="btn-primary" onclick="importFromText()">Применить данные</button>
+  </div>
+  <button class="btn-secondary" style="color:#ef4444;" onclick="resetToEmbedded()">🔄 Вернуть исходную базу (вшитую)</button>
+</div>
+
+<script>
+const EMBEDDED_DATA = {"racks": [{"id": "r_s1", "name": "Кор. 1 (верх)", "cols": 3, "x": 20, "y": 25, "face": "bottom", "cells": {"1": {"top": {"name": "Мэтз", "qty": 1, "note": ""}, "bottom": {"name": "Мэтз", "qty": 1, "note": ""}}, "2": {"top": {"name": "Мэтз", "qty": 1, "note": ""}, "bottom": null}, "3": {"top": {"name": "Мэтз", "qty": 1, "note": ""}, "bottom": null}}}, {"id": "r_l1", "name": "Длин. 1 (верх)", "cols": 9, "x": 310, "y": 25, "face": "bottom", "cells": {"1": {"top": {"name": "Ермаков", "qty": 1, "note": ""}, "bottom": null}, "2": {"top": {"name": "Слонимский", "qty": 1, "note": ""}, "bottom": null}, "3": {"top": {"name": "Сбс рф", "qty": 1, "note": ""}, "bottom": {"name": "Слонимский", "qty": 1, "note": ""}}, "4": {"top": {"name": "Слонимский", "qty": 1, "note": ""}, "bottom": null}, "5": {"top": {"name": "Белсспецвнештехника", "qty": 1, "note": ""}, "bottom": null}, "7": {"top": {"name": "Белспецвнештехника", "qty": 1, "note": ""}, "bottom": null}}}, {"id": "r_s2", "name": "Кор. 2 (низ)", "cols": 3, "x": 20, "y": 195, "face": "top", "cells": {"1": {"top": {"name": "Мэтз", "qty": 1, "note": ""}, "bottom": null}, "2": {"top": {"name": "Прокопович", "qty": 1, "note": ""}, "bottom": null}}}, {"id": "r_l2", "name": "Длин. 2 (низ)", "cols": 9, "x": 310, "y": 195, "face": "top", "cells": {"2": {"top": {"name": "Сб рф", "qty": 1, "note": ""}, "bottom": null}, "7": {"top": {"name": "Белспецвнештехника", "qty": 1, "note": ""}, "bottom": null}, "8": {"top": {"name": "Белспецвнештехника", "qty": 1, "note": ""}, "bottom": {"name": "Белспецвнештехника", "qty": 1, "note": ""}}}}, {"id": "r_s3", "name": "Кор. 3 (верх)", "cols": 3, "x": 20, "y": 345, "face": "bottom", "cells": {"2": {"top": {"name": "М1 трейдинг", "qty": 1, "note": ""}, "bottom": null}}}, {"id": "r_l3", "name": "Длин. 3 (верх)", "cols": 9, "x": 310, "y": 345, "face": "bottom", "cells": {"2": {"top": null, "bottom": null}, "3": {"top": null, "bottom": null}, "5": {"top": {"name": "Штрих", "qty": 1, "note": ""}, "bottom": null}, "6": {"top": null, "bottom": null}, "7": {"top": {"name": "Софтклуб", "qty": 1, "note": ""}, "bottom": null}, "8": {"top": {"name": "Эйбл форвардес", "qty": 1, "note": ""}, "bottom": {"name": "Софт клуб", "qty": 1, "note": ""}}}}, {"id": "r_s4", "name": "Кор. 4 (низ)", "cols": 3, "x": 20, "y": 515, "face": "top", "cells": {"2": {"top": null, "bottom": {"name": "Виноградова", "qty": 1, "note": ""}}, "3": {"top": null, "bottom": {"name": "Белспецнештехника", "qty": 1, "note": ""}}}}, {"id": "r_l4", "name": "Длин. 4 (низ)", "cols": 9, "x": 310, "y": 515, "face": "top", "cells": {"2": {"top": {"name": "Гк ультра", "qty": 1, "note": ""}, "bottom": null}, "3": {"top": {"name": "Росна", "qty": 1, "note": ""}, "bottom": null}, "4": {"top": {"name": "Сп подарки", "qty": 1, "note": ""}, "bottom": null}, "5": {"top": {"name": "Софтклуб", "qty": 1, "note": ""}, "bottom": null}, "6": {"top": {"name": "Софтклуб", "qty": 1, "note": ""}, "bottom": null}, "7": {"top": {"name": "Софтклуб", "qty": 1, "note": ""}, "bottom": null}}}, {"id": "r_s5", "name": "Кор. 5 (верх)", "cols": 3, "x": 20, "y": 665, "face": "bottom", "cells": {"2": {"top": null, "bottom": {"name": "Прагматика", "qty": 1, "note": ""}}, "3": {"top": null, "bottom": {"name": "Пространство вариантов", "qty": 1, "note": ""}}}}, {"id": "r_l5", "name": "Длин. 5 (верх)", "cols": 9, "x": 310, "y": 665, "face": "bottom", "cells": {"1": {"top": {"name": "Сингл степ Лавинпак", "qty": 1, "note": ""}, "bottom": null}, "2": {"top": {"name": "Лавинпак вектор артис", "qty": 1, "note": ""}, "bottom": null}, "5": {"top": {"name": "Три Ди стиль", "qty": 1, "note": ""}, "bottom": null}}}, {"id": "r_s6", "name": "Кор. 6 (низ)", "cols": 3, "x": 20, "y": 835, "face": "top", "cells": {}}, {"id": "r_l6", "name": "Длин. 6 (низ)", "cols": 9, "x": 310, "y": 835, "face": "top", "cells": {}}]};
+const STORAGE_KEY = 'sklad_tg_data_v2';
+
+let state = JSON.parse(JSON.stringify(EMBEDDED_DATA));
+let scale = 0.55;
+let panX = 10;
+let panY = 10;
+let layoutMode = false;
+let activeRackId = null;
+let activeCellNum = null;
+let searchQuery = '';
+
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+}
+
+function haptic(type = 'light') {
+  if (tg && tg.HapticFeedback) {
+    tg.HapticFeedback.impactOccurred(type);
+  }
+}
+
+function loadState() {
+  try {
+    const localRaw = localStorage.getItem(STORAGE_KEY);
+    if (localRaw) {
+      const parsed = JSON.parse(localRaw);
+      if (parsed && Array.isArray(parsed.racks) && parsed.racks.length > 0) {
+        state = parsed;
+      }
+    }
+  } catch (e) {}
+
+  if (tg && tg.CloudStorage) {
+    tg.CloudStorage.getItem(STORAGE_KEY, (err, val) => {
+      if (!err && val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed && Array.isArray(parsed.racks) && parsed.racks.length > 0) {
+            state = parsed;
+            localStorage.setItem(STORAGE_KEY, val);
+            render();
+          }
+        } catch (e) {}
+      } else {
+        saveState();
+      }
+    });
+  }
+}
+
+function saveState() {
+  const raw = JSON.stringify(state);
+  try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
+  if (tg && tg.CloudStorage && raw.length < 4096) {
+    tg.CloudStorage.setItem(STORAGE_KEY, raw, () => {});
+  }
+}
+
+function render() {
+  const canvas = document.getElementById('canvas');
+  canvas.innerHTML = '';
+  const q = searchQuery.trim().toLowerCase();
+
+  state.racks.forEach(rack => {
+    const rackEl = document.createElement('div');
+    rackEl.className = 'rack ' + (rack.face === 'top' ? 'face-top' : 'face-bottom');
+    rackEl.style.left = rack.x + 'px';
+    rackEl.style.top = rack.y + 'px';
+
+    const head = document.createElement('div');
+    head.className = 'rack-header';
+    head.innerHTML = `
+      <span>${rack.name}</span>
+      <div class="rack-controls">
+        <button class="mini-btn" onclick="flipRack(event, '${rack.id}')">⇅</button>
+      </div>
+    `;
+    rackEl.appendChild(head);
+
+    const row = document.createElement('div');
+    row.className = 'cells-row';
+
+    for (let i = 1; i <= rack.cols; i++) {
+      const cellData = (rack.cells && rack.cells[String(i)]) || { top: null, bottom: null };
+      const topItem = cellData.top && cellData.top.name ? cellData.top : null;
+      const bottomItem = cellData.bottom && cellData.bottom.name ? cellData.bottom : null;
+
+      const cellEl = document.createElement('div');
+      cellEl.className = 'cell';
+      if (topItem || bottomItem) cellEl.classList.add('filled');
+
+      if (q) {
+        const matchTop = topItem && ((topItem.name || '').toLowerCase().includes(q) || (topItem.note || '').toLowerCase().includes(q));
+        const matchBot = bottomItem && ((bottomItem.name || '').toLowerCase().includes(q) || (bottomItem.note || '').toLowerCase().includes(q));
+        if (matchTop || matchBot) cellEl.classList.add('highlight');
+      }
+
+      let inner = `<span class="cell-num">${i}</span>`;
+      if (topItem && bottomItem) {
+        inner += `
+          <div class="dual-items">
+            <div class="dual-top">⬆ ${escapeHtml(topItem.name)}</div>
+            <div class="dual-bottom">⬇ ${escapeHtml(bottomItem.name)}</div>
+          </div>
+        `;
+      } else if (topItem || bottomItem) {
+        const single = topItem || bottomItem;
+        inner += `<div class="single-item">${escapeHtml(single.name)}</div>`;
+      }
+
+      cellEl.innerHTML = inner;
+      cellEl.onclick = (e) => {
+        if (layoutMode) return;
+        e.stopPropagation();
+        openCellSheet(rack.id, i);
+      };
+      row.appendChild(cellEl);
+    }
+
+    rackEl.appendChild(row);
+    setupRackDrag(rackEl, rack);
+    canvas.appendChild(rackEl);
+  });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function setupRackDrag(el, rack) {
+  let startX, startY, origX, origY, dragging = false;
+  el.addEventListener('pointerdown', e => {
+    if (!layoutMode) return;
+    if (e.target.tagName === 'BUTTON') return;
+    e.stopPropagation();
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    origX = rack.x;
+    origY = rack.y;
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const dx = (e.clientX - startX) / scale;
+    const dy = (e.clientY - startY) / scale;
+    rack.x = Math.round((origX + dx) / 5) * 5;
+    rack.y = Math.round((origY + dy) / 5) * 5;
+    el.style.left = rack.x + 'px';
+    el.style.top = rack.y + 'px';
+  });
+  el.addEventListener('pointerup', e => {
+    if (!dragging) return;
+    dragging = false;
+    saveState();
+  });
+}
+
+function flipRack(e, rackId) {
+  e.stopPropagation();
+  const r = state.racks.find(x => x.id === rackId);
+  if (r) {
+    r.face = r.face === 'top' ? 'bottom' : 'top';
+    haptic('light');
+    saveState();
+    render();
+  }
+}
+
+function openCellSheet(rackId, cellNum) {
+  haptic('light');
+  activeRackId = rackId;
+  activeCellNum = String(cellNum);
+  const rack = state.racks.find(r => r.id === rackId);
+  const cell = (rack.cells && rack.cells[activeCellNum]) || { top: null, bottom: null };
+
+  document.getElementById('cellSheetTitle').textContent = `${rack.name} • Ячейка №${cellNum}`;
+  document.getElementById('topName').value = cell.top ? cell.top.name : '';
+  document.getElementById('topQty').value = cell.top ? (cell.top.qty || 1) : 1;
+  document.getElementById('topNote').value = cell.top ? (cell.top.note || '') : '';
+
+  document.getElementById('bottomName').value = cell.bottom ? cell.bottom.name : '';
+  document.getElementById('bottomQty').value = cell.bottom ? (cell.bottom.qty || 1) : 1;
+  document.getElementById('bottomNote').value = cell.bottom ? (cell.bottom.note || '') : '';
+
+  document.getElementById('backdrop').classList.add('open');
+  document.getElementById('cellSheet').classList.add('open');
+}
+
+function clearSlot(slot) {
+  document.getElementById(slot + 'Name').value = '';
+  document.getElementById(slot + 'Qty').value = 1;
+  document.getElementById(slot + 'Note').value = '';
+  haptic('light');
+}
+
+function saveCell() {
+  const rack = state.racks.find(r => r.id === activeRackId);
+  if (!rack) return;
+  if (!rack.cells) rack.cells = {};
+
+  const tName = document.getElementById('topName').value.trim();
+  const tQty = parseInt(document.getElementById('topQty').value) || 1;
+  const tNote = document.getElementById('topNote').value.trim();
+
+  const bName = document.getElementById('bottomName').value.trim();
+  const bQty = parseInt(document.getElementById('bottomQty').value) || 1;
+  const bNote = document.getElementById('bottomNote').value.trim();
+
+  rack.cells[activeCellNum] = {
+    top: tName ? { name: tName, qty: tQty, note: tNote } : null,
+    bottom: bName ? { name: bName, qty: bQty, note: bNote } : null
+  };
+
+  haptic('medium');
+  saveState();
+  render();
+  closeSheets();
+}
+
+function closeSheets() {
+  document.getElementById('backdrop').classList.remove('open');
+  document.getElementById('cellSheet').classList.remove('open');
+  document.getElementById('menuSheet').classList.remove('open');
+}
+
+document.getElementById('backdrop').onclick = closeSheets;
+
+document.getElementById('menuBtn').onclick = () => {
+  haptic('light');
+  document.getElementById('backdrop').classList.add('open');
+  document.getElementById('menuSheet').classList.add('open');
+};
+
+document.getElementById('layoutBtn').onclick = () => {
+  layoutMode = !layoutMode;
+  document.body.classList.toggle('layout-mode', layoutMode);
+  document.getElementById('layoutBtn').classList.toggle('active', layoutMode);
+  haptic('light');
+};
+
+const searchInput = document.getElementById('searchInput');
+const clearSearch = document.getElementById('clearSearch');
+searchInput.oninput = () => {
+  searchQuery = searchInput.value;
+  clearSearch.style.display = searchQuery ? 'block' : 'none';
+  render();
+};
+clearSearch.onclick = () => {
+  searchInput.value = '';
+  searchQuery = '';
+  clearSearch.style.display = 'none';
+  render();
+};
+
+function applyTransform() {
+  document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+}
+
+function fitToScreen() {
+  const vw = window.innerWidth;
+  scale = Math.min(1, Math.max(0.32, (vw - 16) / 1080));
+  panX = 8;
+  panY = 10;
+  applyTransform();
+}
+
+document.getElementById('zoomIn').onclick = () => {
+  scale = Math.min(2, scale + 0.15);
+  applyTransform();
+};
+document.getElementById('zoomOut').onclick = () => {
+  scale = Math.max(0.25, scale - 0.15);
+  applyTransform();
+};
+document.getElementById('zoomFit').onclick = fitToScreen;
+
+// Pan & Pinch
+const viewport = document.getElementById('viewport');
+let pointers = new Map();
+let lastPan = null;
+let lastDist = null;
+
+viewport.addEventListener('pointerdown', e => {
+  pointers.set(e.pointerId, e);
+  if (pointers.size === 1) {
+    lastPan = { x: e.clientX - panX, y: e.clientY - panY };
+  } else if (pointers.size === 2) {
+    const pts = Array.from(pointers.values());
+    lastDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+  }
+});
+
+viewport.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, e);
+  if (pointers.size === 1 && lastPan) {
+    panX = e.clientX - lastPan.x;
+    panY = e.clientY - lastPan.y;
+    applyTransform();
+  } else if (pointers.size === 2) {
+    const pts = Array.from(pointers.values());
+    const dist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+    if (lastDist) {
+      scale = Math.min(2.2, Math.max(0.25, scale * (dist / lastDist)));
+      applyTransform();
+    }
+    lastDist = dist;
+  }
+});
+
+viewport.addEventListener('pointerup', e => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) lastDist = null;
+  if (pointers.size === 1) {
+    const p = Array.from(pointers.values())[0];
+    lastPan = { x: p.clientX - panX, y: p.clientY - panY };
+  } else {
+    lastPan = null;
+  }
+});
+viewport.addEventListener('pointercancel', e => {
+  pointers.delete(e.pointerId);
+  lastDist = null;
+  lastPan = null;
+});
+
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sklad_backup.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyBackupText() {
+  navigator.clipboard.writeText(JSON.stringify(state, null, 2)).then(() => {
+    alert('Данные скопированы в буфер обмена!');
+  }).catch(() => {
+    alert('Не удалось скопировать автоматически. Используйте скачивание файла.');
+  });
+}
+
+function togglePasteBox() {
+  const box = document.getElementById('pasteBox');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+function importFromText() {
+  try {
+    const raw = document.getElementById('jsonPasteInput').value.trim();
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.racks)) throw new Error();
+    state = parsed;
+    saveState();
+    render();
+    closeSheets();
+    haptic('medium');
+    alert('Данные успешно загружены!');
+  } catch (e) {
+    alert('Ошибка: неверный формат JSON текста.');
+  }
+}
+
+function resetToEmbedded() {
+  if (confirm('Вернуть исходную базу товаров из файла? Текущие несохранённые изменения будут заменены.')) {
+    state = JSON.parse(JSON.stringify(EMBEDDED_DATA));
+    saveState();
+    render();
+    closeSheets();
+    haptic('medium');
+  }
+}
+
+// Init
+render();
+fitToScreen();
+loadState();
+</script>
+</body>
+</html>
